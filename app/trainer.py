@@ -242,6 +242,24 @@ class LoRATrainer:
 
         dataset = Dataset.from_list([tokenize(ex, w) for ex, w in zip(training_data, weights)])
 
+        pad_id = tokenizer.pad_token_id
+
+        def collate(features):
+            max_len = max(len(f["input_ids"]) for f in features)
+            input_ids, attention_mask, labels, weight = [], [], [], []
+            for f in features:
+                pad = max_len - len(f["input_ids"])
+                input_ids.append(f["input_ids"] + [pad_id] * pad)
+                attention_mask.append(f["attention_mask"] + [0] * pad)
+                labels.append(f["labels"] + [-100] * pad)
+                weight.append(f["weight"])
+            return {
+                "input_ids": torch.tensor(input_ids),
+                "attention_mask": torch.tensor(attention_mask),
+                "labels": torch.tensor(labels),
+                "weight": torch.tensor(weight, dtype=torch.float32),
+            }
+
         trainer = _WeightedTrainer(
             model=model,
             args=TrainingArguments(
@@ -256,6 +274,7 @@ class LoRATrainer:
                 report_to="none",
             ),
             train_dataset=dataset,
+            data_collator=collate,
         )
         trainer.train()
 
