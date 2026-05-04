@@ -1,6 +1,7 @@
 from openai import OpenAI
 from compressor import HierarchicalCompressor
 from memory import ImportanceLedger
+from trainer import LoRATrainer
 
 VLLM_BASE_URL = "http://localhost:8000/v1"
 MODEL = "/home/turner/src/humanLLM/models/Qwen2.5-7B-Instruct-AWQ"
@@ -12,6 +13,7 @@ class Conversation:
         self.client = OpenAI(base_url=VLLM_BASE_URL, api_key="placeholder")
         self.compressor = HierarchicalCompressor(self.client, MODEL)
         self.ledger = ImportanceLedger()
+        self.trainer = LoRATrainer()
         self.messages: list[dict] = []
 
     def chat(self, user_input: str) -> str:
@@ -35,7 +37,9 @@ class Conversation:
         facts = self.compressor.compress(self.messages, existing_facts=self.ledger.facts)
         self.ledger.add_facts(facts)
         self.ledger.save()
-        print(f"Saved {len(facts)} facts. Run `train.py` to consolidate into adapter.")
+        replay = self.ledger.sample_replay(n=32)
+        self.trainer.generate_and_save(facts, replay)
+        print(f"Saved {len(facts)} facts. Stop vLLM then run `train.py` to consolidate into adapter.")
 
     def _compress_context(self):
         facts = self.compressor.compress(self.messages, existing_facts=self.ledger.facts)
