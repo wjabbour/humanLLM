@@ -110,7 +110,7 @@ class LoRATrainer:
 
     def _generate_synthetic_data(self, facts: list[str]) -> list[dict]:
         facts_str = "\n".join(f"- {f}" for f in facts)
-        prompt = SYNTH_PROMPT.format(n=len(facts) * 4, facts=facts_str)
+        prompt = SYNTH_PROMPT.format(n=len(facts) * 10, facts=facts_str)
         try:
             response = self.client.chat.completions.create(
                 model=VLLM_MODEL,
@@ -192,7 +192,7 @@ class LoRATrainer:
         avg = sum(fact_score.values()) / len(fact_score) if fact_score else 1.0
         weights = []
         for indices in coverage:
-            valid = [fact_score.get(facts[i], 0.5) for i in indices if i < len(facts)]
+            valid = [fact_score.get(facts[i], 0.5) for i in (int(x) for x in indices) if i < len(facts)]
             weights.append(max(valid) if valid else avg)
         return weights
 
@@ -267,7 +267,7 @@ class LoRATrainer:
             model=model,
             args=TrainingArguments(
                 output_dir=str(self.adapter_path),
-                num_train_epochs=3,
+                num_train_epochs=20,
                 per_device_train_batch_size=1,
                 gradient_accumulation_steps=4,
                 learning_rate=2e-4,

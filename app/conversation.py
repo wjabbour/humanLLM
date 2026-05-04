@@ -4,7 +4,7 @@ from memory import ImportanceLedger
 from trainer import LoRATrainer
 
 VLLM_BASE_URL = "http://localhost:8000/v1"
-MODEL = "/home/turner/src/humanLLM/models/Qwen2.5-7B-Instruct-AWQ"
+MODEL = "personal"
 CONTEXT_COMPRESS_THRESHOLD = 6000  # approx tokens before compression fires
 
 
