@@ -32,13 +32,13 @@ class Conversation:
         if not self.messages:
             return
         print("Compressing context and saving to memory ledger...")
-        facts = self.compressor.compress(self.messages)
+        facts = self.compressor.compress(self.messages, existing_facts=self.ledger.facts)
         self.ledger.add_facts(facts)
         self.ledger.save()
         print(f"Saved {len(facts)} facts. Run `train.py` to consolidate into adapter.")
 
     def _compress_context(self):
-        facts = self.compressor.compress(self.messages)
+        facts = self.compressor.compress(self.messages, existing_facts=self.ledger.facts)
         self.ledger.add_facts(facts)
         summary = "\n".join(f.text for f in facts if f.tier >= 1)
         self.messages = [{"role": "system", "content": f"[Context summary]\n{summary}"}]
