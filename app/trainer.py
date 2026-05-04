@@ -77,6 +77,13 @@ class LoRATrainer:
             print("[trainer] no synthetic data generated")
             return
 
+        print(f"[trainer] filtering hallucinations...")
+        training_data = self._filter_hallucinations(training_data, all_facts)
+        if not training_data:
+            print("[trainer] all examples filtered out, skipping")
+            return
+        print(f"[trainer] {len(training_data)} examples passed hallucination filter")
+
         print(f"[trainer] annotating per-example fact coverage...")
         coverage = self._annotate_coverage(training_data, all_facts)
         weights = self._coverage_weights(coverage, all_facts, fact_score)
@@ -117,6 +124,40 @@ class LoRATrainer:
             print(f"[trainer] synthetic data generation failed: {e}")
             return []
 
+    def _filter_hallucinations(self, examples: list[dict], facts: list[str]) -> list[dict]:
+        """Remove examples whose responses contain claims not grounded in the fact list."""
+        facts_str = "\n".join(f"- {f}" for f in facts)
+        indexed_examples = "\n".join(
+            f"{i}: Q={ex['prompt']!r} A={ex['response']!r}"
+            for i, ex in enumerate(examples)
+        )
+        prompt = (
+            "You are a fact-checker. Given known facts about a user and a set of Q&A examples, "
+            "mark each example as valid or invalid.\n"
+            "An example is INVALID if its answer contains specific claims not supported by the known facts "
+            "(e.g. invented names, made-up numbers, assumed details).\n"
+            "An example is VALID if its answer only uses information present in the known facts, "
+            "or makes no specific claims.\n\n"
+            f"Known facts:\n{facts_str}\n\n"
+            f"Examples:\n{indexed_examples}\n\n"
+            'Return JSON: {"valid": [true, false, ...]}'
+        )
+        try:
+            response = self.client.chat.completions.create(
+                model=VLLM_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                max_tokens=512,
+            )
+            data = json.loads(response.choices[0].message.content)
+            valid_flags = data.get("valid", [True] * len(examples))
+            while len(valid_flags) < len(examples):
+                valid_flags.append(True)
+            return [ex for ex, ok in zip(examples, valid_flags) if ok]
+        except Exception as e:
+            print(f"[trainer] hallucination filter failed: {e}, keeping all examples")
+            return examples
+
     def _annotate_coverage(self, examples: list[dict], facts: list[str]) -> list[list[int]]:
         """Returns list of fact-index lists, one per example."""
         indexed_facts = "\n".join(f"{i}: {f}" for i, f in enumerate(facts))
@@ -148,12 +189,11 @@ class LoRATrainer:
             return [list(range(len(facts)))] * len(examples)
 
     def _coverage_weights(self, coverage: list[list[int]], facts: list[str], fact_score: dict[str, float]) -> list[float]:
+        avg = sum(fact_score.values()) / len(fact_score) if fact_score else 1.0
         weights = []
         for indices in coverage:
-            if indices:
-                weights.append(max(fact_score.get(facts[i], 0.5) for i in indices if i < len(facts)))
-            else:
-                weights.append(sum(fact_score.values()) / len(fact_score) if fact_score else 1.0)
+            valid = [fact_score.get(facts[i], 0.5) for i in indices if i < len(facts)]
+            weights.append(max(valid) if valid else avg)
         return weights
 
     def _compute_weights(self, new_facts: list[Fact], replay: list[dict], n: int) -> list[float]:
