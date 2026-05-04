@@ -210,11 +210,11 @@ class LoRATrainer:
         tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
         tokenizer.pad_token = tokenizer.eos_token
 
-        if self.adapter_path.exists():
-            base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, torch_dtype=torch.float16, device_map="auto")
+        if (self.adapter_path / "adapter_config.json").exists():
+            base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, dtype=torch.float16, device_map={"": 0})
             model = PeftModel.from_pretrained(base, str(self.adapter_path), is_trainable=True)
         else:
-            base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, torch_dtype=torch.float16, device_map="auto")
+            base = AutoModelForCausalLM.from_pretrained(BASE_MODEL, dtype=torch.float16, device_map={"": 0})
             model = get_peft_model(base, LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
                 r=64,
@@ -223,6 +223,9 @@ class LoRATrainer:
                 lora_dropout=0.05,
             ))
             model.print_trainable_parameters()
+
+        model.enable_input_require_grads()
+        model.gradient_checkpointing_enable()
 
         def tokenize(example, weight):
             prompt_ids = tokenizer(example["prompt"] + "\n", add_special_tokens=True)["input_ids"]
@@ -265,13 +268,14 @@ class LoRATrainer:
             args=TrainingArguments(
                 output_dir=str(self.adapter_path),
                 num_train_epochs=3,
-                per_device_train_batch_size=2,
+                per_device_train_batch_size=1,
                 gradient_accumulation_steps=4,
                 learning_rate=2e-4,
                 fp16=True,
                 logging_steps=10,
                 save_strategy="no",
                 report_to="none",
+                remove_unused_columns=False,
             ),
             train_dataset=dataset,
             data_collator=collate,
