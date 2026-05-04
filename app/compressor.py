@@ -14,14 +14,18 @@ class Fact:
 
 
 COMPRESS_PROMPT = """\
-You are a memory compression system. Given a conversation, extract facts at three tiers:
-- Tier 2 (abstract): stable personal facts, preferences, identity (e.g. "User's name is Turner", "User lives in Denver")
-- Tier 1 (summary): session-level context, goals, topics discussed
-- Tier 0 (detail): specific exchanges, temporary context
+You are a memory compression system. Extract only facts ABOUT THE USER from this conversation — not general world knowledge, not things the assistant said about topics.
 
-Return JSON: {"facts": [{"text": "...", "tier": 0|1|2, "importance": 0.0-1.0}]}
+Tiers:
+- Tier 2 (abstract): stable personal facts about the user — identity, location, preferences, background. Write in third person (e.g. "User's name is Turner", "User lives in Denver", "User prefers Python")
+- Tier 1 (summary): what the user was doing or discussing this session, third person (e.g. "User was discussing their move from Memphis to Denver")
+- Tier 0 (detail): specific things the user said that may be relevant later but aren't stable facts, third person
 
-Higher importance = more likely to be remembered long-term. Tier 2 facts should generally have high importance.
+Do NOT include: general facts about cities, topics, or things the assistant said that aren't user-specific.
+
+Return JSON: {{"facts": [{{"text": "...", "tier": 0|1|2, "importance": 0.0-1.0}}]}}
+
+Higher importance = more stable and personal. Tier 2 facts should be 0.8+.
 
 Conversation:
 {conversation}"""
