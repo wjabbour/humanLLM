@@ -34,17 +34,19 @@ class Conversation:
         if not self.messages:
             return
         print("Compressing context and saving to memory ledger...")
-        facts = self.compressor.compress(self.messages, existing_facts=self.ledger.facts)
-        self.ledger.add_facts(facts)
+        result = self.compressor.compress(self.messages, existing_facts=self.ledger.facts)
+        self.ledger.apply_corrections(result.corrections)
+        self.ledger.add_facts(result.facts)
         self.ledger.save()
         replay = self.ledger.sample_replay(n=32)
-        self.trainer.generate_and_save(facts, replay)
-        print(f"Saved {len(facts)} facts. Stop vLLM then run `train.py` to consolidate into adapter.")
+        self.trainer.generate_and_save(result.facts, replay)
+        print(f"Saved {len(result.facts)} facts. Stop vLLM then run `train.py` to consolidate into adapter.")
 
     def _compress_context(self):
-        facts = self.compressor.compress(self.messages, existing_facts=self.ledger.facts)
-        self.ledger.add_facts(facts)
-        summary = "\n".join(f.text for f in facts if f.tier >= 1)
+        result = self.compressor.compress(self.messages, existing_facts=self.ledger.facts)
+        self.ledger.apply_corrections(result.corrections)
+        self.ledger.add_facts(result.facts)
+        summary = "\n".join(f.text for f in result.facts if f.tier >= 1)
         self.messages = [{"role": "system", "content": f"[Context summary]\n{summary}"}]
 
     def _estimate_tokens(self) -> int:

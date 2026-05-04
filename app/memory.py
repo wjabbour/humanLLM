@@ -12,6 +12,15 @@ class ImportanceLedger:
         self.path.parent.mkdir(exist_ok=True)
         self.facts: list[dict] = self._load()
 
+    def apply_corrections(self, corrections: list[dict]):
+        for correction in corrections:
+            existing = self._find(correction["old"])
+            if existing:
+                print(f"[ledger] correcting: '{correction['old']}' → '{correction['new']}'")
+                existing["text"] = correction["new"]
+            else:
+                print(f"[ledger] correction target not found: '{correction['old']}' (skipping)")
+
     def add_facts(self, facts: list[Fact]):
         for fact in facts:
             existing = self._find(fact.text)

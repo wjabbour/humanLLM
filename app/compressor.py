@@ -1,9 +1,8 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from openai import OpenAI
 
 # Tier 0 = low-level detail, tier 1 = summary, tier 2 = abstract fact
-TIERS = [0, 1, 2]
 
 
 @dataclass
@@ -11,6 +10,12 @@ class Fact:
     text: str
     tier: int
     importance: float  # 0.0 - 1.0
+
+
+@dataclass
+class CompressResult:
+    facts: list[Fact]
+    corrections: list[dict]  # [{"old": "...", "new": "..."}]
 
 
 COMPRESS_PROMPT = """\
@@ -23,16 +28,24 @@ Tiers:
 
 Do NOT include: general facts about cities, topics, or things the assistant said that aren't user-specific.
 
-{existing_section}Return JSON: {{"facts": [{{"text": "...", "tier": 0|1|2, "importance": 0.0-1.0}}]}}
+{existing_section}Return JSON:
+{{
+  "facts": [{{"text": "...", "tier": 0|1|2, "importance": 0.0-1.0}}],
+  "corrections": [{{"old": "exact text of known fact being corrected", "new": "corrected fact text"}}]
+}}
 
+"corrections" should only appear when the conversation explicitly contradicts or updates a known fact.
 Higher importance = more stable and personal. Tier 2 facts should be 0.8+.
 
 Conversation:
 {conversation}"""
 
 EXISTING_FACTS_SECTION = """\
-IMPORTANT: The following facts are already known. If this conversation confirms or repeats one of them, \
-use the EXACT same text so it can be matched. Only add new facts that aren't already covered.
+IMPORTANT: The following facts are already known.
+- If this conversation CONFIRMS or REPEATS one, use the EXACT same text so it can be matched.
+- If this conversation CORRECTS one (e.g. user says "actually my dog's name is Max not Moby"), \
+add it to "corrections" with the old text and the corrected text.
+- Only add truly NEW facts to "facts".
 
 Known facts:
 {facts}
@@ -45,7 +58,7 @@ class HierarchicalCompressor:
         self.client = client
         self.model = model
 
-    def compress(self, messages: list[dict], existing_facts: list[dict] | None = None) -> list[Fact]:
+    def compress(self, messages: list[dict], existing_facts: list[dict] | None = None) -> CompressResult:
         conversation = "\n".join(
             f"{m['role'].upper()}: {m['content']}" for m in messages
         )
@@ -62,4 +75,6 @@ class HierarchicalCompressor:
             response_format={"type": "json_object"},
         )
         data = json.loads(response.choices[0].message.content)
-        return [Fact(**f) for f in data["facts"]]
+        facts = [Fact(**f) for f in data.get("facts", [])]
+        corrections = data.get("corrections", [])
+        return CompressResult(facts=facts, corrections=corrections)
