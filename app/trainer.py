@@ -110,13 +110,13 @@ class LoRATrainer:
 
     def _generate_synthetic_data(self, facts: list[str]) -> list[dict]:
         facts_str = "\n".join(f"- {f}" for f in facts)
-        prompt = SYNTH_PROMPT.format(n=len(facts) * 10, facts=facts_str)
+        prompt = SYNTH_PROMPT.format(n=min(len(facts) * 6, 40), facts=facts_str)
         try:
             response = self.client.chat.completions.create(
                 model=VLLM_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                max_tokens=2048,
+                max_tokens=4096,
             )
             data = json.loads(response.choices[0].message.content)
             return data.get("examples", [])
